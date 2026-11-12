@@ -21,6 +21,9 @@ Mapa de la consigna dentro de este archivo:
     PUNTO 3 -> PROVIDERS: los proveedores que se pueden cargar por configuracion.
     PUNTO 4 -> metodo stream() de cada proveedor (streaming con yield).
     PUNTO 5 -> classify_error(): reconoce rate limit, red y servidor.
+    PRE-ENTREGA 2 -> create_chat_model(): el mismo proveedor, con la misma clave,
+                     modelo, reintentos y timeout, pero como modelo de LangChain
+                     (ChatOpenAI / ChatAnthropic) para usarlo en chain.py.
 """
 
 import os
@@ -38,6 +41,11 @@ from typing import Any, AsyncIterator, ClassVar
 # Se renombran con "as" porque ambos SDK usan los mismos nombres de clase.
 import anthropic
 import openai
+
+# PRE-ENTREGA 2 - Clientes de LangChain para cada proveedor.
+from langchain_anthropic import ChatAnthropic
+from langchain_core.language_models import BaseChatModel
+from langchain_openai import ChatOpenAI
 
 from schemas import ErrorKind, GenerationParams
 
@@ -68,6 +76,12 @@ class BaseProvider(ABC):
         if not api_key:
             raise ValueError(f"Falta {self.api_key_env} en el entorno.")
 
+        # Se guardan para poder crear tambien el modelo de LangChain
+        # (create_chat_model) con exactamente la misma configuracion.
+        self._api_key = api_key
+        self.max_retries = max_retries
+        self.timeout = timeout
+
         # REINTENTOS Y TIMEOUT: los SDK reintentan solos los errores 429, 5xx
         # y de conexion (esperando cada vez un poco mas). Aca solo los hacemos
         # explicitos. "Async" = las llamadas de red no bloquean el programa.
@@ -84,6 +98,20 @@ class BaseProvider(ABC):
         NO captura errores: los deja subir hasta el manager, que decide si
         usar el respaldo o devolver un LLMError.
         """
+
+    def create_chat_model(self, temperature: float, max_tokens: int) -> BaseChatModel:
+        """
+        PRE-ENTREGA 2 - Devuelve este proveedor como modelo de chat de LangChain.
+        No es abstracto para que un proveedor que no lo necesite (ej. el
+        EchoProvider de los tests) no este obligado a implementarlo.
+        """
+        raise NotImplementedError(f"{self.name} no tiene modelo de LangChain.")
+
+    @property
+    def outage_errors(self) -> tuple[type[Exception], ...]:
+        # Errores de "caida" (rate limit, red, servidor): los que justifican
+        # pasar al proveedor de respaldo. Lo usa chain.py (with_fallbacks).
+        return self.rate_limit_errors + self.network_errors + self.server_errors
 
     def classify_error(self, exc: Exception) -> ErrorKind | None:
         # PUNTO 5 - Traduce un error de ESTE SDK a una etiqueta corta.
@@ -116,6 +144,17 @@ class OpenAIProvider(BaseProvider):
 
     def create_client(self, api_key: str, max_retries: int, timeout: float) -> openai.AsyncOpenAI:
         return openai.AsyncOpenAI(api_key=api_key, max_retries=max_retries, timeout=timeout)
+
+    def create_chat_model(self, temperature: float, max_tokens: int) -> ChatOpenAI:
+        # PRE-ENTREGA 2 - Mismos datos que create_client, pero via LangChain.
+        return ChatOpenAI(
+            model=self.model,
+            api_key=self._api_key,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_retries=self.max_retries,
+            timeout=self.timeout,
+        )
 
     async def stream(self, params: GenerationParams) -> AsyncIterator[str]:
         # PUNTO 4 - stream=True pide a OpenAI que devuelva eventos parciales
@@ -167,6 +206,17 @@ class AnthropicProvider(BaseProvider):
 
     def create_client(self, api_key: str, max_retries: int, timeout: float) -> anthropic.AsyncAnthropic:
         return anthropic.AsyncAnthropic(api_key=api_key, max_retries=max_retries, timeout=timeout)
+
+    def create_chat_model(self, temperature: float, max_tokens: int) -> ChatAnthropic:
+        # PRE-ENTREGA 2 - Igual que en stream(): temperature NO se envia,
+        # porque la version instalada del SDK de Anthropic no la acepta.
+        return ChatAnthropic(
+            model=self.model,
+            api_key=self._api_key,
+            max_tokens=max_tokens,
+            max_retries=self.max_retries,
+            timeout=self.timeout,
+        )
 
     async def stream(self, params: GenerationParams) -> AsyncIterator[str]:
         # Diferencias con OpenAI:

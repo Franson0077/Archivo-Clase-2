@@ -2,3 +2,7 @@ openai>=3.45.0
 anthropic>=2.5.0
 pydantic>=2.14.0
 python-dotenv>=1.2.0
+# Pre-entrega 2: pipeline LCEL
+langchain-core>=1.8.0
+langchain-openai>=1.7.4
+langchain-anthropic>=1.7.10
