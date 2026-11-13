@@ -68,7 +68,7 @@ python -m pip install -r requirements.txt
 >
 > ```powershell
 > $env:PYYAML_FORCE_LIBYAML = "0"   # PyYAML en Python puro (sin compilar)
-> python -m pip install pyyaml openai anthropic pydantic python-dotenv
+> python -m pip install pyyaml openai anthropic pydantic python-dotenv httpx2
 > python -m pip install langsmith --no-deps
 > python -m pip install anyio distro orjson requests requests-toolbelt sniffio "uuid-utils<1.0" websockets xxhash packaging
 > python -m pip install certifi httpx jsonpatch langchain-protocol tenacity tiktoken
